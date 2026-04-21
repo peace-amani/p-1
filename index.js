@@ -5335,7 +5335,8 @@ async function startBot(loginMode = 'auto', loginData = null) {
             // the LID↔PN mapping, and asserts sessions for the mapped LIDs.
             if (_isDmJid && content && !content.react && !content.delete && !content.edit) {
                 try {
-                    await sock.getUSyncDevices([jid], false, false);
+                    const _devs = await sock.getUSyncDevices([jid], false, false);
+                    originalConsoleMethods.log('[WOLF-DM-SEND] devices for', jid, '→', JSON.stringify(_devs?.map(d => d.jid)));
                 } catch (e) {
                     originalConsoleMethods.error('[WOLF-DM-SEND] getUSyncDevices error:', e?.message || e);
                 }
@@ -5345,11 +5346,15 @@ async function startBot(loginMode = 'auto', loginData = null) {
                 return r;
             };
             if (_skipButtonWrap) {
-                return _storeResult(await originalSendMessage(jid, content, options, ...rest));
+                let _r; try { _r = await originalSendMessage(jid, content, options, ...rest); } catch(e) { originalConsoleMethods.error('[WOLF-DM-SEND] skipWrap ERROR:', e?.message); throw e; }
+                if (_isDmJid) originalConsoleMethods.log('[WOLF-DM-SEND] skipWrap sent', jid, '→ msgId:', _r?.key?.id);
+                return _storeResult(_r);
             }
             const _activeCmd = getActiveCommand(jid);
             if (_activeCmd && _noWrapCommands.has(_activeCmd.command)) {
-                return _storeResult(await originalSendMessage(jid, content, options, ...rest));
+                let _r; try { _r = await originalSendMessage(jid, content, options, ...rest); } catch(e) { originalConsoleMethods.error('[WOLF-DM-SEND] noWrap ERROR:', e?.message); throw e; }
+                if (_isDmJid) originalConsoleMethods.log('[WOLF-DM-SEND] noWrap sent', jid, '→ msgId:', _r?.key?.id);
+                return _storeResult(_r);
             }
             if (isButtonModeEnabled() && _giftedBtns && content && !_isDmJid) {
                 if (!content.buttons && !content.templateButtons && !content.interactiveButtons && !content.contacts && !content.react) {
@@ -5472,6 +5477,9 @@ async function startBot(loginMode = 'auto', loginData = null) {
             let result;
             try {
                 result = await originalSendMessage(jid, content, options, ...rest);
+                if (_isDmJid) {
+                    originalConsoleMethods.log('[WOLF-DM-SEND] sent to', jid, '→ msgId:', result?.key?.id, '| fromMe:', result?.key?.fromMe, '| status:', result?.status);
+                }
             } catch (e) {
                 originalConsoleMethods.error('[WOLF-DM-SEND] originalSendMessage ERROR →', jid, '|', e?.message || e, '|', e?.stack?.split('\n')[1] || '');
                 throw e;
