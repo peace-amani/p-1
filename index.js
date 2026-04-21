@@ -7419,21 +7419,22 @@ async function handleIncomingMessage(sock, msg) {
     const startTime = Date.now();
     
     try {
+        // ── LID → PN normalisation using Baileys' own remoteJidAlt field ────
+        // In Baileys v7 LID mode, m.key.remoteJid arrives as a LID JID
+        // (e.g. "153266612649985@lid"). Baileys also provides remoteJidAlt
+        // with the real PN JID. Replace remoteJid with it so that all
+        // downstream code (chatId, senderJid, per-command jid reads) uses
+        // the correct addressing, without any custom DB lookup here.
+        if (msg.key.remoteJidAlt
+            && msg.key.remoteJid?.endsWith('@lid')
+            && msg.key.remoteJidAlt.endsWith('@s.whatsapp.net')) {
+            msg.key.remoteJid = msg.key.remoteJidAlt;
+        }
+
         const chatId = msg.key.remoteJid;
         const senderJid = msg.key.participant || chatId;
         
         const isGroup = chatId.includes('@g.us');
-        
-        // ── TEMP KEY DIAGNOSTICS ─────────────────────────────────────────────
-        if (!isGroup && chatId !== 'status@broadcast' && !msg.key.fromMe) {
-            originalConsoleMethods.log('[WOLF-KEY]', JSON.stringify({
-                remoteJid: msg.key.remoteJid,
-                remoteJidAlt: msg.key.remoteJidAlt,
-                participant: msg.key.participant,
-                fromMe: msg.key.fromMe,
-                id: msg.key.id?.substring(0, 12)
-            }));
-        }
         
         if (isGroup && senderJid.includes('@lid')) {
             resolvePhoneFromLid(senderJid);
