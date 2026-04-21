@@ -5382,13 +5382,26 @@ async function startBot(loginMode = 'auto', loginData = null) {
                     // per startup so we don't exhaust prekeys on every send.
                     if (!_ownDeviceSessionsRefreshed && _meLidBase && Array.isArray(_devs) && _devs.length) {
                         const _ownLidUser = _meLidBase.split('@')[0]; // e.g. "161031913480224"
+                        // LID sessions → used for DSM nodes (device sync) in all DM sends
                         const _ownLidJids = _devs
                             .map(d => d.jid)
                             .filter(j => j && j.split('@')[0].startsWith(_ownLidUser)
-                                && !j.startsWith(`${_ownLidUser}:17`)); // exclude self (bot device)
-                        if (_ownLidJids.length) {
-                            await sock.assertSessions(_ownLidJids, true); // force=true bypasses cache
-                            originalConsoleMethods.log('[WOLF-DM-SEND] force-refreshed own device sessions (→pkmsg) for:', _ownLidJids);
+                                && !j.startsWith(`${_ownLidUser}:17`)); // exclude bot device 17
+                        // PN sessions → used for main payload when sending to own number
+                        // (self/saved-messages). Also needed so device 0 decrypts the
+                        // primary enc node when jid === own PN. Must exclude device 17 PN.
+                        const _mePNUser = jidNormalizedUser(
+                            sock.authState?.creds?.me?.id || ''
+                        ).split('@')[0]; // e.g. "254785471416"
+                        const _ownPNJids = _mePNUser ? _devs
+                            .map(d => d.jid)
+                            .filter(j => j && j.endsWith('@s.whatsapp.net')
+                                && j.split('@')[0].split(':')[0] === _mePNUser
+                                && !j.startsWith(`${_mePNUser}:17`)) : []; // exclude bot device 17
+                        const _allOwnJids = [..._ownLidJids, ..._ownPNJids];
+                        if (_allOwnJids.length) {
+                            await sock.assertSessions(_allOwnJids, true); // force=true bypasses cache
+                            originalConsoleMethods.log('[WOLF-DM-SEND] force-refreshed own device sessions (→pkmsg) for:', _allOwnJids);
                         }
                         _ownDeviceSessionsRefreshed = true;
                     }
