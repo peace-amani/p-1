@@ -7419,19 +7419,6 @@ async function handleIncomingMessage(sock, msg) {
     const startTime = Date.now();
     
     try {
-        // ── TEMP: full key dump for any LID DM ──────────────────────────────
-        if (msg.key.remoteJid?.endsWith('@lid') && !msg.key.remoteJid?.endsWith('@g.us')) {
-            originalConsoleMethods.log('[WOLF-LIDMSG]', JSON.stringify({
-                remoteJid:      msg.key.remoteJid,
-                remoteJidAlt:   msg.key.remoteJidAlt,
-                participant:    msg.key.participant,
-                participantAlt: msg.key.participantAlt,
-                fromMe:         msg.key.fromMe,
-                pushName:       msg.pushName,
-                id:             msg.key.id?.substring(0, 12)
-            }));
-        }
-
         // ── LID → PN normalisation using Baileys' own remoteJidAlt field ────
         // In Baileys v7 LID mode, m.key.remoteJid arrives as a LID JID
         // (e.g. "153266612649985@lid"). Baileys also provides remoteJidAlt
