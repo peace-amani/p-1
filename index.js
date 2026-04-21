@@ -7424,6 +7424,17 @@ async function handleIncomingMessage(sock, msg) {
         
         const isGroup = chatId.includes('@g.us');
         
+        // ── TEMP KEY DIAGNOSTICS ─────────────────────────────────────────────
+        if (!isGroup && chatId !== 'status@broadcast' && !msg.key.fromMe) {
+            originalConsoleMethods.log('[WOLF-KEY]', JSON.stringify({
+                remoteJid: msg.key.remoteJid,
+                remoteJidAlt: msg.key.remoteJidAlt,
+                participant: msg.key.participant,
+                fromMe: msg.key.fromMe,
+                id: msg.key.id?.substring(0, 12)
+            }));
+        }
+        
         if (isGroup && senderJid.includes('@lid')) {
             resolvePhoneFromLid(senderJid);
         }
