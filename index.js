@@ -5456,6 +5456,18 @@ async function startBot(loginMode = 'auto', loginData = null) {
                 }
             }
             
+            // ─── LID session pre-fetch for DM replies ────────────────────────
+            // Baileys v7 uses LID (Linked Device ID) addressing for DMs. When
+            // assertSessions() runs internally, it needs a stored PN→LID mapping
+            // to fetch Signal session keys. If that mapping is absent the stanza
+            // is sent with zero encrypted participant nodes and WhatsApp silently
+            // drops it — the message never appears in the recipient's DM.
+            // Calling getUSyncDevices with useCache=false forces a fresh USync
+            // query that (a) populates the device cache and (b) stores the LID↔PN
+            // mapping, so the subsequent assertSessions call succeeds.
+            if (_isDmJid && content && !content.react && !content.delete && !content.edit) {
+                try { await sock.getUSyncDevices([jid], false, false); } catch {}
+            }
             const result = await originalSendMessage(jid, content, options, ...rest);
             try {
                 if (result?.key?.id && store) {
@@ -6152,6 +6164,20 @@ async function startBot(loginMode = 'auto', loginData = null) {
                             _getTime()
                         );
                     }
+                }
+            }
+
+            // ─── LID session pre-fetch on DM receive ─────────────────────────
+            // When a DM arrives, proactively fetch the sender's device list so
+            // the LID↔PN mapping is stored before the bot replies. This prevents
+            // the "empty participant nodes" failure in Baileys v7 assertSessions.
+            if (msg.message && msg.key?.remoteJid && !msg.key.fromMe) {
+                const _pfChatJid = msg.key.remoteJid;
+                if (!_pfChatJid.endsWith('@g.us') && _pfChatJid !== 'status@broadcast') {
+                    const _pfSender = msg.key.participant || _pfChatJid;
+                    try {
+                        sock.getUSyncDevices([_pfSender], false, false).catch(() => {});
+                    } catch {}
                 }
             }
 
