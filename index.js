@@ -231,7 +231,7 @@ import chalk from 'chalk';
 import readline from 'readline';
 import { exec, execSync } from 'child_process';
 import axios from "axios";
-import { normalizeMessageContent, downloadContentFromMessage, downloadMediaMessage, jidNormalizedUser, generateWAMessageFromContent, proto } from '@whiskeysockets/baileys';
+import { normalizeMessageContent, downloadContentFromMessage, downloadMediaMessage, jidNormalizedUser, jidDecode as jidDecodeWA, generateWAMessageFromContent, proto } from '@whiskeysockets/baileys';
 import NodeCache from 'node-cache';
 import { isSudoNumber, isSudoJid, getSudoMode, addSudoJid, mapLidToPhone, isSudoByLid, getPhoneFromLid, getSudoList, hasUnmappedSudos } from './lib/sudo-store.js';
 import supabaseDb, { setConfigBotId, isUsingWasm, forceBackup } from './lib/database.js';
@@ -5270,11 +5270,38 @@ async function startBot(loginMode = 'auto', loginData = null) {
         ]);
         sock.sendMessage = async (jid, content, options, ...rest) => {
             // ─── Status broadcast bypass ─────────────────────────────────────
-            // status@broadcast must go straight to Baileys — font transforms
-            // change the message text and button-mode wrapping silently converts
-            // it to an interactive message that never appears as a WA status.
             if (jid === 'status@broadcast') {
                 return originalSendMessage(jid, content, options, ...rest);
+            }
+            // ─── JID normalisation (Baileys v7 multi-device / LID fix) ───────
+            // In Baileys v7, m.key.remoteJid can arrive as either:
+            //   • "254785471416:17@s.whatsapp.net"  – a device-specific PN JID
+            //   • "29094829916260@lid"              – a LID (Linked Device ID) JID
+            // Sending to either of these raw values causes WhatsApp to silently
+            // drop the message. We must normalise to the bare PN JID first.
+            try {
+                if (jid.endsWith('@lid')) {
+                    // Resolve LID → PN using the reverse mapping stored by Baileys
+                    const _lidUser = jidDecodeWA(jid)?.user;
+                    if (_lidUser) {
+                        const _stored = await state.keys.get('lid-mapping', [`${_lidUser}_reverse`]);
+                        const _pnUser = _stored?.[`${_lidUser}_reverse`];
+                        if (_pnUser) {
+                            const _resolvedJid = `${_pnUser}@s.whatsapp.net`;
+                            originalConsoleMethods.log(`[WOLF-JID-NORM] LID ${jid} → ${_resolvedJid}`);
+                            jid = _resolvedJid;
+                        } else {
+                            originalConsoleMethods.log(`[WOLF-JID-NORM] No reverse mapping for LID ${jid}, using as-is`);
+                        }
+                    }
+                } else if (jid.includes(':') && jid.endsWith('@s.whatsapp.net')) {
+                    // Strip device-specific suffix (e.g. 254785471416:17@s.whatsapp.net)
+                    const _normJid = jidNormalizedUser(jid);
+                    originalConsoleMethods.log(`[WOLF-JID-NORM] device-JID ${jid} → ${_normJid}`);
+                    jid = _normJid;
+                }
+            } catch (_normErr) {
+                originalConsoleMethods.error('[WOLF-JID-NORM] normalisation error:', _normErr?.message);
             }
             // ─── Font transformation ────────────────────────────────────────
             const _activeFont = (globalThis._fontConfig && globalThis._fontConfig.font) || 'default';
