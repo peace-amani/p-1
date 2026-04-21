@@ -5336,7 +5336,8 @@ async function startBot(loginMode = 'auto', loginData = null) {
             if (_activeCmd && _noWrapCommands.has(_activeCmd.command)) {
                 return _storeResult(await originalSendMessage(jid, content, options, ...rest));
             }
-            if (isButtonModeEnabled() && _giftedBtns && content) {
+            const _isDmJid = !jid.endsWith('@g.us') && jid !== 'status@broadcast';
+            if (isButtonModeEnabled() && _giftedBtns && content && !_isDmJid) {
                 if (!content.buttons && !content.templateButtons && !content.interactiveButtons && !content.contacts && !content.react) {
                     const msgText = content.text || content.caption || '';
                     const isTextOnly = typeof content.text === 'string' && content.text.length > 0;
