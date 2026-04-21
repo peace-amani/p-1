@@ -5466,9 +5466,19 @@ async function startBot(loginMode = 'auto', loginData = null) {
             // query that (a) populates the device cache and (b) stores the LID↔PN
             // mapping, so the subsequent assertSessions call succeeds.
             if (_isDmJid && content && !content.react && !content.delete && !content.edit) {
-                try { await sock.getUSyncDevices([jid], false, false); } catch {}
+                try {
+                    await sock.getUSyncDevices([jid], false, false);
+                } catch (e) {
+                    originalConsoleMethods.error('[WOLF-DM-SEND] getUSyncDevices error:', e?.message || e);
+                }
             }
-            const result = await originalSendMessage(jid, content, options, ...rest);
+            let result;
+            try {
+                result = await originalSendMessage(jid, content, options, ...rest);
+            } catch (e) {
+                originalConsoleMethods.error('[WOLF-DM-SEND] originalSendMessage ERROR →', jid, '|', e?.message || e, '|', e?.stack?.split('\n')[1] || '');
+                throw e;
+            }
             try {
                 if (result?.key?.id && store) {
                     store.addMessage(jid, result.key.id, result);
