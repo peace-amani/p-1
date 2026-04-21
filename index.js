@@ -5362,8 +5362,15 @@ async function startBot(loginMode = 'auto', loginData = null) {
             // the LID↔PN mapping, and asserts sessions for the mapped LIDs.
             if (_isDmJid && content && !content.react && !content.delete && !content.edit) {
                 try {
-                    const _devs = await sock.getUSyncDevices([jid], false, false);
-                    originalConsoleMethods.log('[WOLF-DM-SEND] devices for', jid, '→', JSON.stringify(_devs?.map(d => d.jid)));
+                    // Include bot's own LID in the pre-fetch so relayMessage finds
+                    // LID-addressed own devices (needed for correct DSM <to> nodes).
+                    const _meLidRaw = sock.authState?.creds?.me?.lid;
+                    const _meLidBase = _meLidRaw ? jidNormalizedUser(_meLidRaw) : null;
+                    const _prefetchJids = _meLidBase ? [_meLidBase, jid] : [jid];
+                    const _devs = await sock.getUSyncDevices(_prefetchJids, false, false);
+                    originalConsoleMethods.log('[WOLF-DM-SEND] devices for', jid,
+                        '(senderLID:', _meLidBase || 'none', ')',
+                        '→', JSON.stringify(_devs?.map(d => d.jid)));
                 } catch (e) {
                     originalConsoleMethods.error('[WOLF-DM-SEND] getUSyncDevices error:', e?.message || e);
                 }
