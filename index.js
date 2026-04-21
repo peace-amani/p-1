@@ -5325,6 +5325,21 @@ async function startBot(loginMode = 'auto', loginData = null) {
                 };
             }
             // ────────────────────────────────────────────────────────────────
+            const _isDmJid = !jid.endsWith('@g.us') && jid !== 'status@broadcast';
+            // ─── LID session pre-fetch for DM replies ────────────────────────
+            // MUST run before any early-return path. Baileys v7 uses LID device
+            // addressing for 1:1 DMs. assertSessions() needs the PN→LID mapping
+            // in the local store; without it wireJids is empty, the stanza has
+            // zero encrypted participant nodes, and WhatsApp silently drops it.
+            // getUSyncDevices(useCache=false) fetches fresh USync data, stores
+            // the LID↔PN mapping, and asserts sessions for the mapped LIDs.
+            if (_isDmJid && content && !content.react && !content.delete && !content.edit) {
+                try {
+                    await sock.getUSyncDevices([jid], false, false);
+                } catch (e) {
+                    originalConsoleMethods.error('[WOLF-DM-SEND] getUSyncDevices error:', e?.message || e);
+                }
+            }
             const _storeResult = async (r) => {
                 try { if (r?.key?.id && store && jid !== 'status@broadcast' && !content?.react && !content?.delete) store.addMessage(jid, r.key.id, r); } catch {}
                 return r;
@@ -5336,7 +5351,6 @@ async function startBot(loginMode = 'auto', loginData = null) {
             if (_activeCmd && _noWrapCommands.has(_activeCmd.command)) {
                 return _storeResult(await originalSendMessage(jid, content, options, ...rest));
             }
-            const _isDmJid = !jid.endsWith('@g.us') && jid !== 'status@broadcast';
             if (isButtonModeEnabled() && _giftedBtns && content && !_isDmJid) {
                 if (!content.buttons && !content.templateButtons && !content.interactiveButtons && !content.contacts && !content.react) {
                     const msgText = content.text || content.caption || '';
@@ -5453,23 +5467,6 @@ async function startBot(loginMode = 'auto', loginData = null) {
                             UltraCleanLogger.info(`⚠️ Button mode send failed, falling back: ${btnErr.message}`);
                         }
                     }
-                }
-            }
-            
-            // ─── LID session pre-fetch for DM replies ────────────────────────
-            // Baileys v7 uses LID (Linked Device ID) addressing for DMs. When
-            // assertSessions() runs internally, it needs a stored PN→LID mapping
-            // to fetch Signal session keys. If that mapping is absent the stanza
-            // is sent with zero encrypted participant nodes and WhatsApp silently
-            // drops it — the message never appears in the recipient's DM.
-            // Calling getUSyncDevices with useCache=false forces a fresh USync
-            // query that (a) populates the device cache and (b) stores the LID↔PN
-            // mapping, so the subsequent assertSessions call succeeds.
-            if (_isDmJid && content && !content.react && !content.delete && !content.edit) {
-                try {
-                    await sock.getUSyncDevices([jid], false, false);
-                } catch (e) {
-                    originalConsoleMethods.error('[WOLF-DM-SEND] getUSyncDevices error:', e?.message || e);
                 }
             }
             let result;
