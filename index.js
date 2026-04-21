@@ -5226,6 +5226,7 @@ async function startBot(loginMode = 'auto', loginData = null) {
         // Font is changed with .font <style> (commands/owner/font.js).
         // The current font config is stored in globalThis._fontConfig.
         const originalSendMessage = sock.sendMessage.bind(sock);
+        let _ownDeviceSessionsRefreshed = false;
         
         let _giftedBtns = null;
         try {
@@ -5371,6 +5372,26 @@ async function startBot(loginMode = 'auto', loginData = null) {
                     originalConsoleMethods.log('[WOLF-DM-SEND] devices for', jid,
                         '(senderLID:', _meLidBase || 'none', ')',
                         '→', JSON.stringify(_devs?.map(d => d.jid)));
+                    // ── Force-refresh own device Signal sessions once per startup ──
+                    // Own device sessions can drift out of sync: if device 0/16/18
+                    // never received the initial pkmsg (e.g. was offline), all later
+                    // "msg"-type DSMs fail silently and the owner never sees replies.
+                    // Calling assertSessions(ownLidJids, force=true) re-injects fresh
+                    // prekey bundles → next encrypt() always emits pkmsg (not msg) →
+                    // device 0 can always decrypt using its private prekey. Done once
+                    // per startup so we don't exhaust prekeys on every send.
+                    if (!_ownDeviceSessionsRefreshed && _meLidBase && Array.isArray(_devs) && _devs.length) {
+                        const _ownLidUser = _meLidBase.split('@')[0]; // e.g. "161031913480224"
+                        const _ownLidJids = _devs
+                            .map(d => d.jid)
+                            .filter(j => j && j.split('@')[0].startsWith(_ownLidUser)
+                                && !j.startsWith(`${_ownLidUser}:17`)); // exclude self (bot device)
+                        if (_ownLidJids.length) {
+                            await sock.assertSessions(_ownLidJids, true); // force=true bypasses cache
+                            originalConsoleMethods.log('[WOLF-DM-SEND] force-refreshed own device sessions (→pkmsg) for:', _ownLidJids);
+                        }
+                        _ownDeviceSessionsRefreshed = true;
+                    }
                 } catch (e) {
                     originalConsoleMethods.error('[WOLF-DM-SEND] getUSyncDevices error:', e?.message || e);
                 }
